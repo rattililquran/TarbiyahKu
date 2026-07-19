@@ -1,56 +1,856 @@
--- ============================================================
--- PATCH — Fase C: HAPUS fitur Jurnal (Opsi B: bersih total)
--- Fitur Jurnal Refleksi diganti oleh Dzikir & Doa Harian.
--- Jalankan di Supabase SQL Editor (project afykoejnpkiorqbkgndp).
--- Jalankan BERURUTAN. Aman diulang (idempoten).
--- ============================================================
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>TarbiyahKu · Catat tumbuhnya, jaga waktunya</title>
+<meta name="description" content="Buku penghubung digital tarbiyah anak. Aplikasi tarbiyah terbaik adalah yang tidak mengalahkan waktu bermain dan tumbuh bersama anaknya sendiri.">
+<meta name="theme-color" content="#96271F">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,400;1,9..144,600&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Amiri:wght@400;700&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   TOKENS — TarbiyahKu × arah desain "Tally"
+   paper cream · ink · merah Rattilil · hijau sawah · garis pasir
+============================================================ */
+:root{
+  --paper:#FBF6EC;
+  --card:#FFFDF7;
+  --ink:#221B15;
+  --ink-soft:#6B5F52;
+  --line:#E8DCC6;
+  --line-strong:#D8C8A9;
+  --red:#96271F;
+  --red-deep:#701C16;
+  --green:#2E6B4E;
+  --green-soft:#E4EFE7;
+  --amber:#B97F24;
+  --amber-soft:#F6ECD8;
+  --radius:14px;
+  --mono:'IBM Plex Mono',ui-monospace,monospace;
+  --body:'Plus Jakarta Sans',system-ui,sans-serif;
+  --disp:'Fraunces',Georgia,serif;
+  --arab:'Amiri',serif;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html{scroll-behavior:smooth}
+body{font-family:var(--body);background:var(--paper);color:var(--ink);font-size:15px;line-height:1.55;
+  background-image:radial-gradient(var(--line) .8px,transparent .8px);background-size:22px 22px}
+button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
+input,select,textarea{font-family:inherit;font-size:15px;color:var(--ink);background:var(--card);
+  border:1.5px solid var(--line-strong);border-radius:10px;padding:10px 12px;width:100%}
+input:focus,select:focus,textarea:focus,button:focus-visible{outline:2px solid var(--red);outline-offset:1px}
+textarea{resize:vertical;min-height:76px}
+label{display:block;font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--ink-soft);margin:14px 0 5px}
+a{color:var(--red)}
+.app{max-width:480px;margin:0 auto;min-height:100dvh;position:relative;padding-bottom:86px}
 
--- ── LANGKAH 0 — CEK & CADANGKAN dulu (WAJIB, karena drop permanen) ──
--- Lihat isinya (kalau kosong / hanya akun uji, boleh langsung lanjut):
---   select user_id, count(*) from public.jurnal group by user_id;
--- Arsipkan seluruh data ke tabel cadangan (jaring pengaman; hapus manual nanti bila yakin):
-create table if not exists public._arsip_jurnal as table public.jurnal;
--- (opsional) unduh sebagai JSON dari Table Editor / atau:
---   select jsonb_agg(to_jsonb(j)) from public.jurnal j;
+/* ---------- utilitas gaya Tally ---------- */
+.eyebrow{font-family:var(--mono);font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-soft)}
+.eyebrow::before{content:'◇ ';color:var(--red)}
+.disp{font-family:var(--disp);font-weight:600;letter-spacing:-.01em}
+.disp em{font-style:italic;color:var(--red)}
+.mono{font-family:var(--mono)}
+.chip{display:inline-block;font-size:13px;font-weight:600;padding:7px 13px;border-radius:999px;
+  border:1.5px solid var(--line-strong);background:var(--card);margin:0 6px 8px 0;transition:.15s}
+.chip.on{background:var(--red);border-color:var(--red);color:#fff}
+.chip.green.on{background:var(--green);border-color:var(--green)}
+.btn{display:block;width:100%;text-align:center;font-weight:700;font-size:15px;padding:13px;
+  border-radius:12px;background:var(--red);color:#fff;transition:.15s}
+.btn:active{transform:scale(.985)}
+.btn.ghost{background:transparent;color:var(--red);border:1.5px solid var(--red)}
+.btn.small{width:auto;display:inline-block;padding:8px 16px;font-size:13px}
+.card{background:var(--card);border:1.5px solid var(--line-strong);border-radius:var(--radius);
+  box-shadow:0 2px 0 var(--line)}
+.badge{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;
+  padding:3px 9px;border-radius:999px;border:1px solid var(--line-strong);background:var(--paper)}
+.badge.live{border-color:var(--green);color:var(--green)}
+.badge.live::before{content:'●';margin-right:5px;animation:pulse 1.6s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
+.hr-dot{border:none;border-top:1.5px dashed var(--line-strong);margin:14px 0}
+.arab{font-family:var(--arab);direction:rtl}
+.muted{color:var(--ink-soft);font-size:13px}
+.hidden{display:none!important}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 
--- ── LANGKAH 1 — Sesuaikan fungsi yang menyentuh jurnal (create or replace) ──
--- 1a. initial_data tanpa key 'journals' (harus lebih dulu sebelum drop app_journals)
-create or replace function public.app_get_initial_data()
-returns jsonb language plpgsql stable security definer set search_path = public as $$
-declare uid uuid := public._uid();
-begin
-  return jsonb_build_object(
-    'profile',      public._profil_json(uid),
-    'todayProgress',public.app_today_progress()
-  );
-end $$;
+/* ---------- marquee kalimat thayyibah ---------- */
+.marquee{overflow:hidden;border-top:1.5px solid var(--line-strong);border-bottom:1.5px solid var(--line-strong);
+  background:var(--card);padding:8px 0;white-space:nowrap}
+.marquee .track{display:inline-block;animation:slide 26s linear infinite;font-family:var(--arab);font-size:17px;color:var(--red-deep)}
+.marquee .track span{margin:0 16px}
+.marquee .track i{font-style:normal;color:var(--line-strong)}
+@keyframes slide{from{transform:translateX(0)}to{transform:translateX(-50%)}}
 
--- 1b. reset_reading tanpa delete jurnal (harus lebih dulu sebelum drop table)
-create or replace function public.app_reset_reading()
-returns jsonb language plpgsql security definer set search_path = public as $$
-declare uid uuid := public._uid();
-begin
-  update public.progres set tanggal_target=null, target_harian=0,
-         halaman_terakhir=0, surah_terakhir=1, ayat_terakhir=0,
-         streak=0, tanggal_update=null, total_khatam=0,
-         status_udzur='', udzur_start=null, udzur_end=null
-   where user_id = uid;
-  if not found then raise exception 'Profil pengguna tidak ditemukan.'; end if;
-  delete from public.log_bacaan where user_id = uid;
-  return public._profil_json(uid);
-end $$;
+/* ---------- header ---------- */
+header.top{display:flex;align-items:center;justify-content:space-between;padding:16px 18px 10px}
+.logo{font-family:var(--disp);font-weight:600;font-size:20px}
+.logo b{color:var(--red);font-style:italic;font-weight:600}
 
--- ── LANGKAH 2 — Drop RPC jurnal ──
-drop function if exists public.app_save_journal(jsonb);
-drop function if exists public.app_delete_journal(bigint);
-drop function if exists public.app_journals();
+/* ---------- nav bawah ---------- */
+nav.bottom{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;
+  background:var(--card);border-top:1.5px solid var(--line-strong);display:flex;z-index:40;
+  padding-bottom:env(safe-area-inset-bottom)}
+nav.bottom button{flex:1;padding:10px 2px 9px;font-size:10.5px;font-family:var(--mono);letter-spacing:.04em;
+  text-transform:uppercase;color:var(--ink-soft);display:flex;flex-direction:column;align-items:center;gap:2px}
+nav.bottom button .ic{font-size:19px;line-height:1}
+nav.bottom button.on{color:var(--red);font-weight:600}
+nav.bottom button.on .ic{transform:translateY(-1px)}
 
--- ── LANGKAH 3 — Drop tabel jurnal (policy jurnal_self_all & index ikut terhapus) ──
-drop table if exists public.jurnal;
+/* ---------- kartu rapor (signature, gaya invoice Tally) ---------- */
+.rapor{padding:16px}
+.rapor .head{display:flex;justify-content:space-between;align-items:baseline}
+.rapor .no{font-family:var(--mono);font-size:11px;color:var(--ink-soft)}
+.rapor h2{font-family:var(--disp);font-size:21px;font-weight:600;margin:2px 0 0}
+.rapor .rows{margin-top:12px}
+.rapor .row{display:flex;justify-content:space-between;align-items:baseline;padding:9px 0;
+  border-bottom:1px dashed var(--line-strong);font-size:13.5px}
+.rapor .row:last-child{border-bottom:none}
+.rapor .row b{font-family:var(--mono);font-size:16px;font-weight:500}
+.rapor .total{margin-top:8px;padding-top:12px;border-top:1.5px solid var(--ink);
+  display:flex;justify-content:space-between;align-items:center}
+.rapor .total .n{font-family:var(--mono);font-size:26px}
+.meter{height:7px;border-radius:99px;background:var(--line);overflow:hidden;margin-top:8px}
+.meter i{display:block;height:100%;background:var(--green);border-radius:99px;transition:width .6s}
 
--- ── VERIFIKASI ──
---   select to_regclass('public.jurnal');                 -- harus NULL
---   select proname from pg_proc where proname like 'app_%journal%';  -- harus 0 baris
---   select public.app_get_initial_data();                -- tak ada key 'journals'
+/* ---------- daftar / timeline ---------- */
+.tl-item{padding:13px 15px;margin:0 0 12px}
+.tl-item .top{display:flex;justify-content:space-between;font-family:var(--mono);font-size:10.5px;
+  letter-spacing:.08em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:6px}
+.tl-item .kg{font-size:14px;margin:4px 0}
+.tag{display:inline-block;font-size:11.5px;font-weight:600;color:var(--green);background:var(--green-soft);
+  border-radius:6px;padding:2px 8px;margin:2px 4px 0 0}
+.note{font-size:12.5px;color:var(--ink-soft);border-left:3px solid var(--amber);padding:2px 0 2px 8px;margin-top:7px}
 
--- Setelah yakin, buang arsip:  drop table if exists public._arsip_jurnal;
+/* ---------- bacaan ---------- */
+.k-card{display:flex;gap:12px;padding:12px;margin-bottom:12px;text-align:left;width:100%}
+.k-thumb{width:104px;min-width:104px;height:70px;border-radius:9px;background:var(--amber-soft);
+  border:1px solid var(--line-strong);overflow:hidden;position:relative;display:flex;align-items:center;justify-content:center;font-size:26px}
+.k-thumb img{width:100%;height:100%;object-fit:cover}
+.k-thumb .dur{position:absolute;right:4px;bottom:4px;background:rgba(20,15,10,.82);color:#fff;
+  font-family:var(--mono);font-size:10px;padding:1px 5px;border-radius:4px}
+.k-thumb .play{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  color:#fff;font-size:26px;text-shadow:0 1px 6px rgba(0,0,0,.6)}
+.k-body h3{font-size:14.5px;line-height:1.35;font-weight:700}
+.k-body .meta{font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--ink-soft);margin-top:5px}
+
+/* ---------- overlay / modal ---------- */
+.overlay{position:fixed;inset:0;background:rgba(30,22,14,.45);z-index:60;display:flex;align-items:flex-end;justify-content:center}
+.sheet{background:var(--paper);width:100%;max-width:480px;max-height:92dvh;overflow-y:auto;
+  border-radius:18px 18px 0 0;padding:18px 18px 30px;border-top:2px solid var(--red)}
+.sheet .grab{width:44px;height:4px;border-radius:99px;background:var(--line-strong);margin:0 auto 14px}
+.reader{font-size:15.5px;line-height:1.75}
+.reader h1,.reader h2,.reader h3{font-family:var(--disp);margin:18px 0 8px;line-height:1.25}
+.reader h1{font-size:24px}.reader h2{font-size:19px}.reader h3{font-size:16px}
+.reader p{margin:0 0 12px}
+.reader ul{margin:0 0 12px 20px}
+.reader em{color:var(--red)}
+.videowrap{position:relative;width:100%;aspect-ratio:16/9;border-radius:12px;overflow:hidden;background:#000}
+.videowrap iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+
+/* ---------- admin ---------- */
+.subtabs{display:flex;gap:8px;overflow-x:auto;padding:4px 0 12px;scrollbar-width:none}
+.subtabs::-webkit-scrollbar{display:none}
+.subtabs .chip{white-space:nowrap;margin:0}
+.adm-row{display:flex;justify-content:space-between;align-items:center;padding:11px 14px;margin-bottom:9px}
+.adm-row .t{font-weight:600;font-size:14px}
+.adm-row .s{font-family:var(--mono);font-size:10.5px;color:var(--ink-soft);margin-top:2px}
+.switch{font-family:var(--mono);font-size:10px;letter-spacing:.08em}
+.off{opacity:.45}
+
+/* ---------- toast ---------- */
+#toast{position:fixed;left:50%;transform:translateX(-50%);bottom:96px;background:var(--ink);color:var(--paper);
+  padding:10px 18px;border-radius:99px;font-size:13.5px;z-index:80;opacity:0;transition:.25s;pointer-events:none;max-width:88%}
+#toast.show{opacity:1}
+
+/* ---------- login ---------- */
+.login{min-height:100dvh;display:flex;flex-direction:column;justify-content:center;padding:28px 24px}
+.login h1{font-family:var(--disp);font-size:34px;font-weight:600;line-height:1.15;margin:14px 0 8px}
+.login h1 em{font-style:italic;color:var(--red)}
+.jargon{font-family:var(--disp);font-style:italic;font-size:14.5px;color:var(--ink-soft);
+  border-left:3px solid var(--red);padding-left:12px;margin-top:26px}
+</style>
+</head>
+<body>
+<div class="app" id="app"></div>
+<div id="toast"></div>
+
+<script>
+/* ============================================================
+   KONFIGURASI — ganti dengan URL Web App GAS Anda (akhiran /exec)
+============================================================ */
+var API_URL = 'https://script.google.com/macros/s/AKfycbxEymfNNyhUdCSgdNdB5FZU4sQR-RsXQC8Xj1CQGZBeABVenZSLCpGBu12ipjX_soIy/exec';
+
+/* ============================================================
+   STATE & UTIL
+============================================================ */
+var S = {
+  token: localStorage.getItem('tk_token') || '',
+  user: JSON.parse(localStorage.getItem('tk_user') || 'null'),
+  config: JSON.parse(localStorage.getItem('tk_config') || 'null'),
+  anakId: localStorage.getItem('tk_anak') || '',
+  view: 'beranda',
+  dash: null, timeline: [], konten: [], kontenFilter: {tipe:'',kategori:''},
+  milestones: [], hafalan: [], admTab: 'anak', admData: {}
+};
+function $(id){ return document.getElementById(id); }
+function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function toast(msg){ var t=$('toast'); t.textContent=msg; t.className='show'; setTimeout(function(){t.className='';},2600); }
+function todayStr(){ var d=new Date(); return d.getFullYear()+'-'+p2(d.getMonth()+1)+'-'+p2(d.getDate()); }
+function p2(n){ return n<10?'0'+n:''+n; }
+function fmtTgl(s){ if(!s)return''; var b=s.split('-'); var bln=['','Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+  return parseInt(b[2],10)+' '+bln[parseInt(b[1],10)]+' '+b[0]; }
+function umurTeks(bulan){ var t=Math.floor(bulan/12), b=bulan%12;
+  return (t>0? t+' thn ':'')+(b>0? b+' bln':(t>0?'':'0 bln')); }
+
+function api(action, payload){
+  payload = payload || {};
+  payload.action = action;
+  payload.token = S.token;
+  return fetch(API_URL, { method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body: JSON.stringify(payload) })
+    .then(function(r){ return r.json(); })
+    .then(function(res){
+      if(res.status==='error' && res.code==='UNAUTHORIZED'){ doLogout(true); throw new Error(res.message); }
+      if(res.status==='error'){ throw new Error(res.message||'Terjadi kesalahan'); }
+      return res.data;
+    });
+}
+
+/* ---------- antrean offline untuk addLog ---------- */
+function queuePush(payload){
+  var q = JSON.parse(localStorage.getItem('tk_queue')||'[]');
+  q.push(payload); localStorage.setItem('tk_queue', JSON.stringify(q));
+}
+function queueSync(){
+  var q = JSON.parse(localStorage.getItem('tk_queue')||'[]');
+  if(!q.length || !navigator.onLine) return;
+  var item = q[0];
+  api('addLog', item).then(function(){
+    q.shift(); localStorage.setItem('tk_queue', JSON.stringify(q));
+    toast('Catatan offline tersinkron ✓'); queueSync();
+  }).catch(function(){});
+}
+window.addEventListener('online', queueSync);
+
+/* ============================================================
+   RENDER ROOT
+============================================================ */
+function render(){
+  if(!S.token || !S.user){ renderLogin(); return; }
+  var el = $('app');
+  var isAdmin = S.user.role==='admin';
+  el.innerHTML =
+    headerHtml() +
+    '<main id="main" style="padding:6px 18px 20px"></main>' +
+    '<nav class="bottom">' +
+      navBtn('beranda','⌂','Beranda') + navBtn('catat','✎','Catat') +
+      navBtn('timeline','☰','Riwayat') + navBtn('bacaan','▤','Bacaan') +
+      (isAdmin? navBtn('admin','⚙','Admin') : '') +
+    '</nav>';
+  var v = S.view;
+  if(v==='beranda') vBeranda();
+  else if(v==='catat') vCatat();
+  else if(v==='timeline') vTimeline();
+  else if(v==='bacaan') vBacaan();
+  else if(v==='admin') vAdmin();
+}
+function navBtn(id,ic,label){
+  return '<button class="'+(S.view===id?'on':'')+'" onclick="go(\''+id+'\')"><span class="ic">'+ic+'</span>'+label+'</button>';
+}
+function go(v){ S.view=v; render(); }
+function headerHtml(){
+  var nm = (S.config && S.config.pengaturan && S.config.pengaturan.nama_keluarga) || 'TarbiyahKu';
+  var streak = S.dash ? S.dash.streak : 0;
+  return '<header class="top">' +
+    '<div><div class="logo">Tarbiyah<b>Ku</b></div>' +
+    '<div class="eyebrow" style="margin-top:1px">'+esc(nm)+'</div></div>' +
+    '<span class="badge live">streak · '+streak+' hari</span>' +
+    '</header>' +
+    '<div class="marquee" aria-hidden="true"><div class="track">'+marqueeTxt()+marqueeTxt()+'</div></div>';
+}
+function marqueeTxt(){
+  var w = ['سُبْحَانَ الله','اَلْحَمْدُ لِلّٰه','لَا إِلٰهَ إِلَّا الله','اللهُ أَكْبَر','مَا شَاءَ الله','بَارَكَ الله'];
+  var s='';
+  for(var i=0;i<w.length;i++) s += '<span>'+w[i]+'</span><i>·</i>';
+  return s;
+}
+
+/* ============================================================
+   LOGIN
+============================================================ */
+function renderLogin(){
+  $('app').innerHTML =
+  '<div class="login">' +
+    '<span class="eyebrow">buku penghubung tarbiyah</span>' +
+    '<h1>Catat <em>tumbuhnya</em>,<br>jaga <em>waktunya</em>.</h1>' +
+    '<p class="muted">Dua menit sehari untuk merekam adab, kegiatan, dan hafalan ananda — selebihnya kembali bermain bersamanya.</p>' +
+    '<label>Username</label><input id="li_u" autocomplete="username">' +
+    '<label>Password</label><input id="li_p" type="password" autocomplete="current-password">' +
+    '<div style="margin-top:20px"><button class="btn" onclick="doLogin()">Masuk</button></div>' +
+    '<div id="li_err" class="muted" style="color:var(--red);margin-top:10px"></div>' +
+    '<p class="jargon">&ldquo;Aplikasi tarbiyah terbaik adalah yang tidak mengalahkan waktu bermain dan tumbuh bersama anaknya sendiri.&rdquo;</p>' +
+  '</div>' +
+  '<div class="marquee" style="position:fixed;bottom:0;left:0;right:0"><div class="track">'+marqueeTxt()+marqueeTxt()+'</div></div>';
+}
+function doLogin(){
+  var u=$('li_u').value, p=$('li_p').value;
+  $('li_err').textContent='';
+  api('login',{username:u,password:p}).then(function(d){
+    S.token=d.token; S.user=d.user;
+    localStorage.setItem('tk_token',d.token);
+    localStorage.setItem('tk_user',JSON.stringify(d.user));
+    return loadConfig();
+  }).then(function(){ S.view='beranda'; render(); loadDashboard(); })
+  .catch(function(e){ $('li_err').textContent=e.message; });
+}
+function doLogout(silent){
+  if(!silent) api('logout',{}).catch(function(){});
+  S.token=''; S.user=null; S.dash=null;
+  localStorage.removeItem('tk_token'); localStorage.removeItem('tk_user');
+  render();
+}
+
+/* ============================================================
+   CONFIG & DASHBOARD
+============================================================ */
+function loadConfig(){
+  return api('getConfig',{}).then(function(cfg){
+    S.config=cfg; localStorage.setItem('tk_config',JSON.stringify(cfg));
+    if(!S.anakId && cfg.anak && cfg.anak.length){ S.anakId=cfg.anak[0].anak_id; localStorage.setItem('tk_anak',S.anakId); }
+  });
+}
+function loadDashboard(){
+  api('getDashboard',{anak_id:S.anakId}).then(function(d){
+    S.dash=d;
+    if(d.anak) { S.anakId=d.anak.anak_id; localStorage.setItem('tk_anak',S.anakId); }
+    if(S.view==='beranda') render();
+  }).catch(function(e){ toast(e.message); });
+}
+
+/* ============================================================
+   VIEW: BERANDA — kartu rapor harian (signature)
+============================================================ */
+function vBeranda(){
+  var m=$('main'); var d=S.dash;
+  if(!d){ m.innerHTML='<p class="muted" style="padding:30px 0;text-align:center">Memuat…</p>'; loadDashboard(); return; }
+  if(!d.anak){
+    m.innerHTML='<div class="card" style="padding:22px;text-align:center;margin-top:14px">'+
+      '<p class="disp" style="font-size:19px">Belum ada data <em>anak</em>.</p>'+
+      '<p class="muted" style="margin:8px 0 16px">Minta admin menambahkan ananda lewat tab Admin.</p></div>';
+    return;
+  }
+  var html='';
+  /* switcher anak */
+  if(d.anakList.length>1){
+    html+='<div style="margin:4px 0 10px">';
+    for(var i=0;i<d.anakList.length;i++){
+      var a=d.anakList[i];
+      html+='<button class="chip '+(a.anak_id===S.anakId?'on':'')+'" onclick="pickAnak(\''+a.anak_id+'\')">'+esc(a.nama)+'</button>';
+    }
+    html+='</div>';
+  }
+  var fase = d.fase? d.fase.nama : '—';
+  var pctPekan = Math.min(100, Math.round(d.week.logCount/4*100));
+  var moodTop = d.week.moods.senang>=d.week.moods.biasa && d.week.moods.senang>=d.week.moods.rewel ? '😊'
+              : (d.week.moods.rewel>d.week.moods.biasa?'😫':'😐');
+  html+=
+  '<section class="card rapor" style="margin-top:6px">'+
+    '<div class="head"><div>'+
+      '<div class="no">RAPOR · '+esc(todayStr())+'</div>'+
+      '<h2>'+esc(d.anak.nama)+'</h2>'+
+    '</div><span class="badge '+(d.today_done?'live':'')+'">'+(d.today_done?'hari ini tercatat':'belum dicatat')+'</span></div>'+
+    '<div class="rows">'+
+      '<div class="row"><span>Umur</span><b>'+umurTeks(d.umur_bulan)+'</b></div>'+
+      '<div class="row"><span>Fase tarbiyah</span><b style="font-size:13px">'+esc(fase)+'</b></div>'+
+      '<div class="row"><span>Catatan 7 hari</span><b>'+d.week.logCount+'</b></div>'+
+      '<div class="row"><span>Adab spontan 7 hari</span><b>'+d.week.adabCount+'</b></div>'+
+      '<div class="row"><span>Mood dominan</span><b>'+moodTop+'</b></div>'+
+    '</div>'+
+    '<div class="total"><span class="eyebrow" style="text-transform:none">Streak pencatatan</span>'+
+      '<span class="n">'+d.streak+'<span style="font-size:13px;color:var(--ink-soft)"> hari</span></span></div>'+
+    '<div class="meter"><i style="width:'+pctPekan+'%"></i></div>'+
+    '<div class="muted" style="font-family:var(--mono);font-size:10.5px;margin-top:5px">'+d.week.logCount+' dari 4 hari terstruktur pekan ini</div>'+
+  '</section>';
+
+  if(d.target){
+    html+='<section class="card" style="padding:14px;margin-top:14px">'+
+      '<span class="eyebrow">target pekan · mulai '+fmtTgl(d.target.pekan_mulai)+'</span>'+
+      '<p style="font-weight:700;margin-top:6px">'+esc(d.target.tema||'')+'</p>'+
+      (d.target.adab_fokus?'<p class="muted" style="margin-top:4px">Adab: '+esc(d.target.adab_fokus)+'</p>':'')+
+      (d.target.hijaiyah_fokus?'<p class="muted">Hijaiyah: '+esc(d.target.hijaiyah_fokus)+'</p>':'')+
+      (d.target.hafalan_fokus?'<p class="muted">Hafalan: '+esc(d.target.hafalan_fokus)+'</p>':'')+
+    '</section>';
+  }
+
+  html+='<div style="display:flex;gap:10px;margin-top:14px">'+
+    '<button class="btn" style="flex:1" onclick="go(\'catat\')">✎ Catat hari ini</button>'+
+    '<button class="btn ghost" style="flex:1" onclick="openMilestone()">Milestone</button>'+
+  '</div>'+
+  '<div style="margin-top:10px"><button class="btn ghost" onclick="openHafalan()">Hafalan &amp; Doa</button></div>'+
+  '<p class="jargon" style="margin-top:24px">&ldquo;'+esc((S.config&&S.config.pengaturan&&S.config.pengaturan.jargon)||'')+'&rdquo;</p>'+
+  '<p style="text-align:center;margin-top:18px"><button class="muted" style="text-decoration:underline" onclick="doLogout()">Keluar ('+esc(S.user.nama)+')</button></p>';
+  m.innerHTML=html;
+}
+function pickAnak(id){ S.anakId=id; localStorage.setItem('tk_anak',id); S.dash=null; render(); loadDashboard(); }
+
+/* ---------- Milestone sheet ---------- */
+function openMilestone(){
+  api('getMilestones',{anak_id:S.anakId}).then(function(list){
+    S.milestones=list;
+    var byFase={};
+    for(var i=0;i<list.length;i++){ (byFase[list[i].fase_id]=byFase[list[i].fase_id]||[]).push(list[i]); }
+    var h='<div class="grab"></div><span class="eyebrow">milestone · '+esc(S.dash.anak.nama)+'</span>';
+    var fases=(S.config&&S.config.fase)||[];
+    for(var f=0;f<fases.length;f++){
+      var items=byFase[fases[f].fase_id]; if(!items) continue;
+      h+='<p class="disp" style="font-size:16px;margin:16px 0 6px">'+esc(fases[f].nama)+'</p>';
+      for(var j=0;j<items.length;j++){
+        var it=items[j];
+        h+='<button class="card adm-row" style="width:100%;text-align:left" onclick="toggleMs(\''+it.milestone_id+'\','+(it.tercapai?'false':'true')+')">'+
+          '<div><div class="t" style="'+(it.tercapai?'color:var(--green)':'')+'">'+(it.tercapai?'✓ ':'')+esc(it.item)+'</div>'+
+          '<div class="s">'+esc(it.kategori)+(it.gender!=='SEMUA'?' · khusus '+(it.gender==='L'?'putra':'putri'):'')+
+          (it.tercapai?' · '+fmtTgl(it.tercapai):'')+'</div></div></button>';
+      }
+    }
+    openSheet(h);
+  }).catch(function(e){toast(e.message);});
+}
+function toggleMs(id,val){
+  api('setMilestone',{anak_id:S.anakId,milestone_id:id,tercapai:val}).then(function(){
+    toast(val==='true'||val===true?'Alhamdulillah, milestone tercapai 🎉':'Milestone dibatalkan');
+    closeSheet(); openMilestone();
+  }).catch(function(e){toast(e.message);});
+}
+
+/* ---------- Hafalan sheet ---------- */
+function openHafalan(){
+  api('getHafalan',{anak_id:S.anakId}).then(function(list){
+    var stLabel={'':'belum','diperdengarkan':'diperdengarkan','menirukan':'menirukan','lancar':'lancar ✓'};
+    var h='<div class="grab"></div><span class="eyebrow">hafalan &amp; doa · dengar → tiru → lancar</span>';
+    for(var i=0;i<list.length;i++){
+      var it=list[i];
+      h+='<div class="card" style="padding:12px 14px;margin-top:10px">'+
+        '<div style="display:flex;justify-content:space-between;align-items:center">'+
+          '<div><b>'+esc(it.nama)+'</b> <span class="badge">'+esc(it.jenis)+'</span></div>'+
+          '<span class="switch" style="color:'+(it.status==='lancar'?'var(--green)':'var(--ink-soft)')+'">'+stLabel[it.status||'']+'</span></div>'+
+        (it.teks_arab?'<p class="arab" style="font-size:20px;margin-top:8px">'+esc(it.teks_arab)+'</p>':'')+
+        '<div style="margin-top:9px">'+
+          hfBtn(it,'diperdengarkan','Dengar')+hfBtn(it,'menirukan','Tiru')+hfBtn(it,'lancar','Lancar')+
+        '</div></div>';
+    }
+    openSheet(h);
+  }).catch(function(e){toast(e.message);});
+}
+function hfBtn(it,st,label){
+  return '<button class="chip green '+(it.status===st?'on':'')+'" onclick="setHf(\''+it.hafalan_id+'\',\''+st+'\')">'+label+'</button>';
+}
+function setHf(id,st){
+  api('updateHafalan',{anak_id:S.anakId,hafalan_id:id,status:st}).then(function(){
+    closeSheet(); openHafalan();
+  }).catch(function(e){toast(e.message);});
+}
+
+/* ============================================================
+   VIEW: CATAT
+============================================================ */
+function vCatat(){
+  var cfg=S.config||{};
+  var day=new Date().getDay();
+  var temaOpts=(cfg.tema||[]).slice().sort(function(a,b){return a.urutan-b.urutan;});
+  var defaultTema='';
+  for(var i=0;i<temaOpts.length;i++) if(parseInt(temaOpts[i].hari_default,10)===day) defaultTema=temaOpts[i].tema_id;
+
+  var umur=S.dash?S.dash.umur_bulan:36;
+  var faseNow=S.dash&&S.dash.fase?S.dash.fase.fase_id:'';
+  var faseUrut={}; var fl=(cfg.fase||[]);
+  for(var f=0;f<fl.length;f++) faseUrut[fl[f].fase_id]=parseInt(fl[f].urutan,10);
+  var adab=(cfg.adab||[]).filter(function(a){
+    if(!faseNow||!faseUrut[a.fase_min]) return true;
+    return faseUrut[faseNow]>=faseUrut[a.fase_min] && faseUrut[faseNow]<=(faseUrut[a.fase_max]||99);
+  });
+
+  var h='<span class="eyebrow">catat · &lt; 2 menit lalu kembali bermain</span>'+
+    '<h2 class="disp" style="font-size:22px;margin:6px 0 2px">Bagaimana <em>hari ini</em>?</h2>'+
+    '<label>Tanggal</label><input type="date" id="c_tgl" value="'+todayStr()+'">'+
+    '<label>Tema</label><select id="c_tema">';
+  for(var t=0;t<temaOpts.length;t++){
+    h+='<option value="'+temaOpts[t].tema_id+'" '+(temaOpts[t].tema_id===defaultTema?'selected':'')+'>'+
+      esc(temaOpts[t].ikon+' '+temaOpts[t].nama)+'</option>';
+  }
+  h+='</select>'+
+    '<label>Kegiatan</label><div id="c_kegchips"></div>'+
+    '<textarea id="c_keg" placeholder="Atau tulis sendiri…"></textarea>'+
+    '<label>Adab yang muncul <em style="text-transform:none">spontan</em></label><div>';
+  for(var a2=0;a2<adab.length;a2++){
+    h+='<button class="chip green" data-ad="'+adab[a2].adab_id+'" onclick="this.classList.toggle(\'on\')">'+esc(adab[a2].label)+'</button>';
+  }
+  h+='</div><input id="c_adcustom" placeholder="Adab lain (opsional)">'+
+    '<label>Mood ananda</label><div>'+
+      moodBtn('senang','😊')+moodBtn('biasa','😐')+moodBtn('rewel','😫')+
+    '</div>'+
+    '<label>Catatan untuk pendamping besok</label><textarea id="c_note" placeholder="Misal: besok ulangi doa makan, tadi hampir bisa sendiri"></textarea>'+
+    '<div style="margin-top:18px"><button class="btn" onclick="submitLog()">Simpan catatan</button></div>';
+  $('main').innerHTML=h;
+  fillKegChips(); $('c_tema').addEventListener('change',fillKegChips);
+  selMood('biasa');
+}
+function moodBtn(v,e){ return '<button class="chip" id="mood_'+v+'" style="font-size:19px;padding:8px 18px" onclick="selMood(\''+v+'\')">'+e+'</button>'; }
+function selMood(v){ S._mood=v; var ms=['senang','biasa','rewel'];
+  for(var i=0;i<ms.length;i++){ var b=$('mood_'+ms[i]); if(b) b.className='chip'+(ms[i]===v?' on':''); } }
+function fillKegChips(){
+  var tid=$('c_tema').value; var box=$('c_kegchips'); var h='';
+  var keg=(S.config.kegiatan||[]).filter(function(k){return k.tema_id===tid;});
+  for(var i=0;i<keg.length;i++) h+='<button class="chip" onclick="addKeg(this)">'+esc(keg[i].label)+'</button>';
+  box.innerHTML=h;
+}
+function addKeg(btn){
+  btn.classList.toggle('on');
+  var picked=[]; var chips=$('c_kegchips').children;
+  for(var i=0;i<chips.length;i++) if(chips[i].classList.contains('on')) picked.push(chips[i].textContent);
+  var manual=$('c_keg').value.split('\n').filter(function(x){return x && picked.indexOf(x)===-1 && !isChipText(x);});
+  $('c_keg').value=picked.concat(manual).join('\n');
+}
+function isChipText(x){
+  var chips=$('c_kegchips').children;
+  for(var i=0;i<chips.length;i++) if(chips[i].textContent===x) return true;
+  return false;
+}
+function submitLog(){
+  var ads=[]; var chips=document.querySelectorAll('[data-ad].on');
+  for(var i=0;i<chips.length;i++) ads.push(chips[i].getAttribute('data-ad'));
+  var payload={
+    anak_id:S.anakId, tanggal:$('c_tgl').value,
+    tema_id:$('c_tema').value, kegiatan:$('c_keg').value,
+    adab_ids:ads.join(';'), adab_custom:$('c_adcustom').value,
+    mood:S._mood||'biasa', catatan_besok:$('c_note').value
+  };
+  if(!payload.anak_id){ toast('Pilih anak dulu di Beranda'); return; }
+  api('addLog',payload).then(function(){
+    toast('Tersimpan. Sekarang… kembali bermain 🌱');
+    S.dash=null; go('beranda'); loadDashboard();
+  }).catch(function(e){
+    queuePush(payload);
+    toast('Offline — catatan diantrekan, akan tersinkron otomatis');
+    S.dash=null; go('beranda');
+  });
+}
+
+/* ============================================================
+   VIEW: TIMELINE
+============================================================ */
+function vTimeline(){
+  $('main').innerHTML='<span class="eyebrow">riwayat · semua pendamping</span><div id="tl" style="margin-top:12px"><p class="muted">Memuat…</p></div>';
+  api('getTimeline',{anak_id:S.anakId,limit:30}).then(function(d){
+    var cfg=S.config||{}; var temaMap={},adabMap={};
+    (cfg.tema||[]).forEach(function(t){temaMap[t.tema_id]=t.ikon+' '+t.nama;});
+    (cfg.adab||[]).forEach(function(a){adabMap[a.adab_id]=a.label;});
+    var h='';
+    if(!d.items.length) h='<div class="card" style="padding:20px;text-align:center"><p class="disp">Belum ada catatan.</p><p class="muted" style="margin-top:6px">Mulai dari tab Catat — dua menit saja.</p></div>';
+    for(var i=0;i<d.items.length;i++){
+      var l=d.items[i];
+      var tags=''; var ids=String(l.adab_ids||'').split(';');
+      for(var j=0;j<ids.length;j++) if(ids[j]&&adabMap[ids[j]]) tags+='<span class="tag">'+esc(adabMap[ids[j]])+'</span>';
+      if(l.adab_custom) tags+='<span class="tag">'+esc(l.adab_custom)+'</span>';
+      var mood={senang:'😊',biasa:'😐',rewel:'😫'}[l.mood]||'';
+      h+='<article class="card tl-item">'+
+        '<div class="top"><span>'+fmtTgl(l.tanggal)+' · '+esc(temaMap[l.tema_id]||'')+'</span><span>'+esc(l.pendamping_nama)+' '+mood+'</span></div>'+
+        (l.kegiatan?'<div class="kg">'+esc(l.kegiatan).replace(/\n/g,'<br>')+'</div>':'')+
+        (tags?'<div>'+tags+'</div>':'')+
+        (l.catatan_besok?'<div class="note">Untuk besok: '+esc(l.catatan_besok)+'</div>':'')+
+      '</article>';
+    }
+    $('tl').innerHTML=h;
+  }).catch(function(e){ $('tl').innerHTML='<p class="muted">'+esc(e.message)+'</p>'; });
+}
+
+/* ============================================================
+   VIEW: BACAAN — artikel / link / video (thumbnail)
+============================================================ */
+function vBacaan(){
+  var f=S.kontenFilter;
+  var h='<span class="eyebrow">bacaan &amp; tontonan · untuk waktu luang</span>'+
+  '<div style="margin:10px 0 4px">'+
+    bcTipe('','Semua')+bcTipe('artikel','📄 Artikel')+bcTipe('link','🔗 Link')+bcTipe('video','▶️ Video')+
+  '</div><div id="klist"><p class="muted">Memuat…</p></div>';
+  $('main').innerHTML=h;
+  api('getKontenList',{tipe:f.tipe}).then(function(list){
+    S.konten=list;
+    var out='';
+    if(!list.length) out='<div class="card" style="padding:20px;text-align:center"><p class="disp">Belum ada konten.</p><p class="muted" style="margin-top:6px">Admin dapat menambah artikel, link, atau video dari tab Admin.</p></div>';
+    for(var i=0;i<list.length;i++) out+=kontenCard(list[i]);
+    $('klist').innerHTML=out;
+  }).catch(function(e){ $('klist').innerHTML='<p class="muted">'+esc(e.message)+'</p>'; });
+}
+function bcTipe(v,label){
+  return '<button class="chip '+(S.kontenFilter.tipe===v?'on':'')+'" onclick="S.kontenFilter.tipe=\''+v+'\';vBacaan()">'+label+'</button>';
+}
+function kontenCard(k){
+  var thumb='';
+  if(k.tipe==='video'){
+    var src=k.thumbnail_url||('https://img.youtube.com/vi/'+k.youtube_id+'/hqdefault.jpg');
+    thumb='<img loading="lazy" src="https://img.youtube.com/vi/'+esc(k.youtube_id)+'/maxresdefault.jpg" '+
+      'onerror="this.onerror=null;this.src=\''+esc(src)+'\'" alt="">'+
+      '<span class="play">▶</span>'+(k.durasi?'<span class="dur">'+esc(k.durasi)+'</span>':'');
+  } else if(k.thumbnail_url){
+    thumb='<img loading="lazy" src="'+esc(k.thumbnail_url)+'" onerror="this.remove()" alt="">';
+  } else {
+    thumb={'artikel':'📄','link':'🔗'}[k.tipe]||'▤';
+  }
+  var badge={'artikel':'artikel','link':'tautan luar','video':'video'}[k.tipe]||k.tipe;
+  return '<button class="card k-card" onclick="openKonten(\''+k.konten_id+'\')">'+
+    '<div class="k-thumb">'+thumb+'</div>'+
+    '<div class="k-body"><h3>'+esc(k.judul)+'</h3>'+
+    '<div class="meta">'+(String(k.pinned)==='TRUE'?'📌 ':'')+badge+' · '+esc(k.kategori||'umum')+
+    (k.sumber?' · '+esc(k.sumber):'')+'</div></div></button>';
+}
+function openKonten(id){
+  var k=null;
+  for(var i=0;i<S.konten.length;i++) if(S.konten[i].konten_id===id) k=S.konten[i];
+  if(!k) return;
+  if(k.tipe==='link'){ window.open(k.url,'_blank','noopener'); return; }
+  if(k.tipe==='video'){
+    openSheet('<div class="grab"></div><span class="eyebrow">video · '+esc(k.kategori||'')+'</span>'+
+      '<h3 class="disp" style="font-size:18px;margin:6px 0 12px">'+esc(k.judul)+'</h3>'+
+      '<div class="videowrap"><iframe src="https://www.youtube-nocookie.com/embed/'+esc(k.youtube_id)+'?rel=0&modestbranding=1" '+
+      'title="'+esc(k.judul)+'" allow="accelerometer;encrypted-media;picture-in-picture" allowfullscreen></iframe></div>'+
+      '<p style="margin-top:12px"><a href="https://www.youtube.com/watch?v='+esc(k.youtube_id)+'" target="_blank" rel="noopener">Buka di YouTube ↗</a></p>');
+    return;
+  }
+  /* artikel */
+  api('getKontenDetail',{konten_id:id}).then(function(full){
+    openSheet('<div class="grab"></div><span class="eyebrow">artikel · '+esc(full.kategori||'')+'</span>'+
+      '<div class="reader" style="margin-top:6px">'+miniMd(full.isi_markdown||'')+'</div>'+
+      (full.sumber?'<p class="muted" style="margin-top:14px">Sumber: '+esc(full.sumber)+'</p>':''));
+  }).catch(function(e){toast(e.message);});
+}
+/* parser Markdown mini: judul, bold, italic, list, paragraf */
+function miniMd(src){
+  var lines=String(src).split('\n'); var out=''; var inList=false;
+  function inline(s){
+    s=esc(s);
+    s=s.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
+    s=s.replace(/\*(.+?)\*/g,'<em>$1</em>');
+    return s;
+  }
+  for(var i=0;i<lines.length;i++){
+    var l=lines[i];
+    if(/^### /.test(l)){ if(inList){out+='</ul>';inList=false;} out+='<h3>'+inline(l.slice(4))+'</h3>'; }
+    else if(/^## /.test(l)){ if(inList){out+='</ul>';inList=false;} out+='<h2>'+inline(l.slice(3))+'</h2>'; }
+    else if(/^# /.test(l)){ if(inList){out+='</ul>';inList=false;} out+='<h1>'+inline(l.slice(2))+'</h1>'; }
+    else if(/^- /.test(l)){ if(!inList){out+='<ul>';inList=true;} out+='<li>'+inline(l.slice(2))+'</li>'; }
+    else if(l.trim()===''){ if(inList){out+='</ul>';inList=false;} }
+    else { if(inList){out+='</ul>';inList=false;} out+='<p>'+inline(l)+'</p>'; }
+  }
+  if(inList) out+='</ul>';
+  return out;
+}
+
+/* ============================================================
+   VIEW: ADMIN
+============================================================ */
+var ADM_TABS=[
+  ['anak','Anak'],['users','Pengguna'],['MasterTema','Tema'],['MasterAdab','Adab'],
+  ['MasterKegiatan','Kegiatan'],['MasterKonten','Konten'],['target','Target'],['setting','Pengaturan']
+];
+function vAdmin(){
+  var h='<span class="eyebrow">panel admin · konfigurasi sistem</span><div class="subtabs" style="margin-top:10px">';
+  for(var i=0;i<ADM_TABS.length;i++){
+    h+='<button class="chip '+(S.admTab===ADM_TABS[i][0]?'on':'')+'" onclick="S.admTab=\''+ADM_TABS[i][0]+'\';vAdmin()">'+ADM_TABS[i][1]+'</button>';
+  }
+  h+='</div><div id="admbody"><p class="muted">Memuat…</p></div>';
+  $('main').innerHTML=h;
+  admLoad();
+}
+
+/* definisi form tiap entitas */
+var FORMS={
+  anak:{title:'Anak',idKey:'anak_id',fields:[
+    {k:'nama',l:'Nama',t:'text'},{k:'tgl_lahir',l:'Tanggal lahir',t:'date'},
+    {k:'gender',l:'Gender',t:'select',o:[['L','Laki-laki'],['P','Perempuan']]},
+    {k:'aktif',l:'Status',t:'select',o:[['TRUE','Aktif'],['FALSE','Nonaktif']]}]},
+  users:{title:'Pengguna',idKey:'user_id',fields:[
+    {k:'nama',l:'Nama',t:'text'},{k:'username',l:'Username',t:'text'},
+    {k:'password',l:'Password (kosongkan jika tidak diubah)',t:'text'},
+    {k:'role',l:'Role',t:'select',o:[['pengguna','Pengguna'],['admin','Admin']]},
+    {k:'aktif',l:'Status',t:'select',o:[['TRUE','Aktif'],['FALSE','Nonaktif']]}]},
+  MasterTema:{title:'Tema',idKey:'tema_id',fields:[
+    {k:'nama',l:'Nama tema',t:'text'},{k:'ikon',l:'Ikon (emoji)',t:'text'},
+    {k:'hari_default',l:'Hari default',t:'select',o:[['0','Ahad'],['1','Senin'],['2','Selasa'],['3','Rabu'],['4','Kamis'],['5','Jumat'],['6','Sabtu']]},
+    {k:'urutan',l:'Urutan',t:'text'},{k:'aktif',l:'Status',t:'select',o:[['TRUE','Aktif'],['FALSE','Nonaktif']]}]},
+  MasterAdab:{title:'Chip Adab',idKey:'adab_id',fields:[
+    {k:'label',l:'Label',t:'text'},
+    {k:'fase_min',l:'Fase mulai',t:'fase'},{k:'fase_max',l:'Fase sampai',t:'fase'},
+    {k:'urutan',l:'Urutan',t:'text'},{k:'aktif',l:'Status',t:'select',o:[['TRUE','Aktif'],['FALSE','Nonaktif']]}]},
+  MasterKegiatan:{title:'Chip Kegiatan',idKey:'kegiatan_id',fields:[
+    {k:'tema_id',l:'Tema',t:'tema'},{k:'label',l:'Label',t:'text'},
+    {k:'urutan',l:'Urutan',t:'text'},{k:'aktif',l:'Status',t:'select',o:[['TRUE','Aktif'],['FALSE','Nonaktif']]}]},
+  MasterKonten:{title:'Konten Bacaan',idKey:'konten_id',fields:[
+    {k:'tipe',l:'Tipe',t:'select',o:[['artikel','📄 Artikel'],['link','🔗 Link'],['video','▶️ Video YouTube']]},
+    {k:'judul',l:'Judul',t:'text'},
+    {k:'kategori',l:'Kategori',t:'select',o:[['adab','Adab'],['hafalan','Hafalan'],['fiqh-anak','Fiqh anak'],['kesehatan','Kesehatan'],['kisah','Kisah'],['umum','Umum']]},
+    {k:'url',l:'URL (link / URL YouTube apa pun)',t:'text'},
+    {k:'isi_markdown',l:'Isi artikel (Markdown)',t:'area'},
+    {k:'durasi',l:'Durasi video (mis. 12:40)',t:'text'},
+    {k:'thumbnail_url',l:'Thumbnail URL (opsional, video otomatis)',t:'text'},
+    {k:'sumber',l:'Sumber / penulis',t:'text'},
+    {k:'status',l:'Status',t:'select',o:[['draft','Draft'],['terbit','Terbit']]},
+    {k:'pinned',l:'Pin di atas',t:'select',o:[['FALSE','Tidak'],['TRUE','Ya 📌']]},
+    {k:'urutan',l:'Urutan',t:'text'}]},
+  target:{title:'Target Pekanan',idKey:'target_id',fields:[
+    {k:'anak_id',l:'Anak',t:'anak'},{k:'pekan_mulai',l:'Pekan mulai',t:'date'},
+    {k:'tema',l:'Tema pekan (mis. Bismillah & Salam)',t:'text'},
+    {k:'adab_fokus',l:'Fokus adab',t:'text'},{k:'hijaiyah_fokus',l:'Fokus hijaiyah',t:'text'},
+    {k:'hafalan_fokus',l:'Fokus hafalan',t:'text'},
+    {k:'status',l:'Status',t:'select',o:[['aktif','Aktif'],['selesai','Selesai']]}]}
+};
+
+function admLoad(){
+  var tab=S.admTab, body=$('admbody');
+  function listUI(items,titleFn,subFn,editFn){
+    var h='<div style="margin:4px 0 12px"><button class="btn small" onclick="admForm(null)">+ Tambah</button></div>';
+    if(!items.length) h+='<p class="muted">Belum ada data.</p>';
+    for(var i=0;i<items.length;i++){
+      var off=(items[i].aktif!==undefined&&String(items[i].aktif)!=='TRUE')||(items[i].status==='draft'||items[i].status==='selesai');
+      h+='<button class="card adm-row'+(off?' off':'')+'" style="width:100%;text-align:left" onclick="admForm('+i+')">'+
+        '<div><div class="t">'+titleFn(items[i])+'</div><div class="s">'+subFn(items[i])+'</div></div><span>›</span></button>';
+    }
+    body.innerHTML=h;
+  }
+  if(tab==='anak'){
+    api('getConfig',{}).then(function(cfg){ S.config=cfg; })['finally'] ? null : null;
+    api('getDashboard',{}).then(function(d){
+      S.admData.items=d.anakList||[];
+      listUI(S.admData.items,function(a){return esc(a.nama)+' ('+a.gender+')';},function(a){return 'lahir '+fmtTgl(a.tgl_lahir);});
+    }).catch(admErr);
+  } else if(tab==='users'){
+    api('adminListUsers',{}).then(function(items){
+      S.admData.items=items;
+      listUI(items,function(u){return esc(u.nama);},function(u){return u.username+' · '+u.role;});
+    }).catch(admErr);
+  } else if(tab==='target'){
+    api('getDashboard',{anak_id:S.anakId}).then(function(d){
+      S.admData.items=d.target?[d.target]:[];
+      listUI(S.admData.items,function(t){return esc(t.tema||'(tanpa tema)');},function(t){return 'mulai '+fmtTgl(t.pekan_mulai)+' · '+t.status;});
+    }).catch(admErr);
+  } else if(tab==='setting'){
+    var pg=(S.config&&S.config.pengaturan)||{};
+    body.innerHTML=
+      '<label>Nama keluarga</label><input id="st_nama" value="'+esc(pg.nama_keluarga||'')+'">'+
+      '<label>Jargon</label><textarea id="st_jargon">'+esc(pg.jargon||'')+'</textarea>'+
+      '<label>Batas jam edit log pengguna</label><input id="st_batas" value="'+esc(pg.batas_edit_log_jam||'24')+'">'+
+      '<div style="margin-top:16px"><button class="btn" onclick="saveSettings()">Simpan pengaturan</button></div>';
+  } else {
+    /* master via config */
+    api('getConfig',{}).then(function(cfg){
+      S.config=cfg; localStorage.setItem('tk_config',JSON.stringify(cfg));
+      var map={MasterTema:'tema',MasterAdab:'adab',MasterKegiatan:'kegiatan'};
+      var items;
+      if(tab==='MasterKonten'){
+        return api('getKontenList',{}).then(function(kn){
+          /* admin juga perlu draft — getKontenList hanya terbit; ambil terbit + info draft via urutan sederhana */
+          S.admData.items=kn;
+          listUI(kn,function(k){return esc(k.judul);},function(k){return k.tipe+' · '+k.status+(String(k.pinned)==='TRUE'?' · 📌':'');});
+        });
+      }
+      items=cfg[map[tab]]||[];
+      S.admData.items=items;
+      var tm={}; (cfg.tema||[]).forEach(function(t){tm[t.tema_id]=t.nama;});
+      listUI(items,
+        function(r){return esc(r.nama||r.label);},
+        function(r){ if(tab==='MasterKegiatan') return esc(tm[r.tema_id]||''); 
+                     if(tab==='MasterTema') return 'hari '+['Ahad','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'][parseInt(r.hari_default,10)]||'';
+                     return 'urutan '+r.urutan; });
+    }).catch(admErr);
+  }
+}
+function admErr(e){ $('admbody').innerHTML='<p class="muted" style="color:var(--red)">'+esc(e.message)+'</p>'; }
+
+function admForm(idx){
+  var tab=S.admTab; var def=FORMS[tab]; if(!def) return;
+  var row=idx===null?{}:S.admData.items[idx];
+  var h='<div class="grab"></div><span class="eyebrow">'+(idx===null?'tambah':'ubah')+' · '+def.title+'</span><div style="margin-top:4px">';
+  for(var i=0;i<def.fields.length;i++){
+    var f=def.fields[i]; var val=row[f.k]!==undefined?row[f.k]:'';
+    h+='<label>'+f.l+'</label>';
+    if(f.t==='select'){
+      h+='<select id="fm_'+f.k+'">';
+      for(var o=0;o<f.o.length;o++) h+='<option value="'+f.o[o][0]+'" '+(String(val)===f.o[o][0]?'selected':'')+'>'+f.o[o][1]+'</option>';
+      h+='</select>';
+    } else if(f.t==='fase'||f.t==='tema'||f.t==='anak'){
+      var src=f.t==='fase'?(S.config.fase||[]):f.t==='tema'?(S.config.tema||[]):(S.config.anak||[]);
+      var vk=f.t==='fase'?'fase_id':f.t==='tema'?'tema_id':'anak_id';
+      h+='<select id="fm_'+f.k+'">';
+      for(var s=0;s<src.length;s++) h+='<option value="'+src[s][vk]+'" '+(val===src[s][vk]?'selected':'')+'>'+esc(src[s].nama)+'</option>';
+      h+='</select>';
+    } else if(f.t==='area'){
+      h+='<textarea id="fm_'+f.k+'" style="min-height:120px">'+esc(val)+'</textarea>';
+    } else {
+      h+='<input id="fm_'+f.k+'" type="'+(f.t==='date'?'date':'text')+'" value="'+esc(val)+'">';
+    }
+  }
+  h+='</div><div style="margin-top:18px"><button class="btn" onclick="admSubmit('+(idx===null?'null':idx)+')">Simpan</button></div>';
+  openSheet(h);
+  /* preview thumbnail YouTube langsung */
+  if(tab==='MasterKonten'){
+    var urlEl=$('fm_url');
+    urlEl.addEventListener('input',function(){
+      var m=urlEl.value.match(/(?:youtube\.com\/(?:watch\?v=|shorts\/|embed\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/);
+      var old=$('yt_prev'); if(old) old.remove();
+      if(m) urlEl.insertAdjacentHTML('afterend','<img id="yt_prev" src="https://img.youtube.com/vi/'+m[1]+'/hqdefault.jpg" style="width:100%;border-radius:10px;margin-top:8px;border:1px solid var(--line-strong)">');
+    });
+  }
+}
+function admSubmit(idx){
+  var tab=S.admTab; var def=FORMS[tab];
+  var row=idx===null?{}:JSON.parse(JSON.stringify(S.admData.items[idx]));
+  for(var i=0;i<def.fields.length;i++){
+    var f=def.fields[i]; var el=$('fm_'+f.k);
+    if(el) row[f.k]=el.value;
+  }
+  var call;
+  if(tab==='anak'){ call=api('adminSaveAnak',row); }
+  else if(tab==='users'){ if(idx!==null&&!row.password) delete row.password; call=api('adminSaveUser',row); }
+  else if(tab==='target'){ row.anak_id=row.anak_id||S.anakId; call=api('adminSaveTarget',row); }
+  else { call=api('adminSaveMaster',{sheet:tab,row:row}); }
+  call.then(function(){
+    toast('Tersimpan ✓'); closeSheet();
+    localStorage.removeItem('tk_config'); S.config=null;
+    loadConfig().then(function(){ vAdmin(); });
+  }).catch(function(e){ toast(e.message); });
+}
+function saveSettings(){
+  var pairs=[['nama_keluarga',$('st_nama').value],['jargon',$('st_jargon').value],['batas_edit_log_jam',$('st_batas').value]];
+  var chain=Promise.resolve();
+  pairs.forEach(function(pr){ chain=chain.then(function(){ return api('adminSavePengaturan',{key:pr[0],value:pr[1]}); }); });
+  chain.then(function(){ toast('Pengaturan tersimpan ✓'); return loadConfig(); }).then(render)
+    .catch(function(e){ toast(e.message); });
+}
+
+/* ============================================================
+   SHEET / OVERLAY
+============================================================ */
+function openSheet(html){
+  closeSheet();
+  var ov=document.createElement('div');
+  ov.className='overlay'; ov.id='ov';
+  ov.innerHTML='<div class="sheet">'+html+'</div>';
+  ov.addEventListener('click',function(e){ if(e.target===ov) closeSheet(); });
+  document.body.appendChild(ov);
+}
+function closeSheet(){ var ov=$('ov'); if(ov) ov.remove(); }
+
+/* ============================================================
+   BOOT
+============================================================ */
+if('serviceWorker' in navigator){ navigator.serviceWorker.register('sw.js').catch(function(){}); }
+render();
+if(S.token){
+  loadConfig().then(function(){ render(); loadDashboard(); queueSync(); })
+    .catch(function(){ render(); });
+}
+</script>
+</body>
+</html>
